@@ -1,6 +1,6 @@
 py360Link
 =========
-This is a Python based utility module for woking with the 360Link XML API from Serial Solutions.  
+Python utilities for woking with the 360Link XML API from Serial Solutions.  
 
 It requires a 360Link XML API key, which is generally the site id that prefixes all Serial Solutions customer web pages, e.g. http://r123456.search.serialssolutions.com.
 
