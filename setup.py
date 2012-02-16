@@ -5,9 +5,8 @@
 from setuptools import setup, find_packages
 
 setup(name='pylink360',
-    version='0.1',
-    packages=find_packages(),
-    #package_dir = {'': 'py360link'},
-    #package_data={'pylink360': ['test_data/*.*']},
+    version='1',
+    packages = find_packages('src'),
+    package_dir = {'': 'src'},
     test_suite = 'py360link.test'
 )
