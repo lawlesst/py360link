@@ -7,7 +7,7 @@ SERSOL_KEY = None
 #Make the OpenURL for passing on.
 SERSOL_MAP = {
     'journal': {
-        'title': 'title',
+        'title': 'atitle',
         'creatorLast': 'aulast',
         'creator': 'au',
         'creatorFirst': 'aufirst',
