@@ -10,6 +10,12 @@ http://code.google.com/p/link360/
 You might also be interested in this overview of the 360Link API:
 http://journal.code4lib.org/articles/108
 
+Install
+-------
+pip install git+git://github.com/lawlesst/py360link.git
+
+Use
+---
 ```python
 from pylink360 import get_sersol_data, Resolve
 query = 'rft_id=info:doi/10.1016/j.neuroimage.2009.12.024'
