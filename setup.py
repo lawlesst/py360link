@@ -4,7 +4,7 @@
 
 from setuptools import setup, find_packages
 
-setup(name='pylink360link',
+setup(name='py360link',
     version='1',
     packages = find_packages('py360link'),
     package_dir = {'': 'py360link'},
