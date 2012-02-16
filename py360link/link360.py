@@ -206,6 +206,23 @@ class Resolved(object):
     def openurl(self):
         return urllib.urlencode(self.openurl_pairs(), doseq=True)
     
+    @property
+    def oclc_number(self):
+        """
+        Parse the original query string and retain certain key, values.
+        Primarily meant for storing the worldcat accession number passed on
+        by Worldcat.org/FirstSearch
+        """
+        import re
+        reg = re.compile('\d+')
+        dat = self.query_dict.get('rfe_dat', None)
+        if dat:
+            #get the first one because dat is a list
+            match = reg.search(dat[0])
+            if match:
+                return match.group()
+        return
+    
     def _retain_ourl_params(self):
         """
         Parse the original query string and retain certain key, values.
