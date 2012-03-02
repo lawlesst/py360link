@@ -53,11 +53,11 @@ class Link360Exception(Exception):
         Exception.__init__(self, message)
         self.Errors = Errors
 
-def get_sersol_response(query, key=None):
+def get_sersol_response(query, key, timeout):
     """
     Get the SerSol API response and parse it into an etree.
     """
-    
+    import urllib2
     if key is None:
         raise Link360Exception('Serial Solutions 360Link XML API key is required.')
     
@@ -69,19 +69,22 @@ def get_sersol_response(query, key=None):
     base_url = "http://%s.openurl.xml.serialssolutions.com/openurlxml?" % key
     base_url += urllib.urlencode(required_url_elements)
     url = base_url + '&%s' % query.lstrip('?')
-    f = urllib.urlopen(url)
+    f = urllib2.urlopen(url, timeout=timeout)
     doc = etree.parse(f)
     return doc
 
-def get_sersol_data(query, key=None):
+def get_sersol_data(query, key=None, timeout=5):
     """
     Get and process the data from the API and store in Python dictionary.
     If you would like to cache the 360Link responses, this is data structure
     that you would like to cache.  
+    
+    Specify a timeout for the http request to 360Link.
+    
     """
     if query is None:
         raise Link360Exception('OpenURL query required.')
-    doc = get_sersol_response(query, key)
+    doc = get_sersol_response(query, key, timeout)
     data = Link360JSON(doc).convert()
     return data
 
