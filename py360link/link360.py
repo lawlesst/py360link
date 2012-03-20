@@ -235,7 +235,7 @@ class Resolved(object):
         This could be also helpful for retaining any other metadata that won't
         be returned from the 360Link API.
         """
-        retain = ['rfe_dat', 'rfr_id']
+        retain = ['rfe_dat', 'rfr_id', 'sid']
         parsed = urlparse.parse_qs(self.query)
         out = []
         for key in retain:
