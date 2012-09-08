@@ -193,6 +193,7 @@ class Resolved(object):
     def __init__(self, data):
         self.data = data
         self.query = data['echoedQuery']['queryString']
+        self.library = data['echoedQuery']['library']['name']
         self.query_dict = urlparse.parse_qs(self.query)
         error = self.data.get('diagnostics', None)
         if error:
