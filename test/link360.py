@@ -7,7 +7,7 @@ except ImportError:
 import unittest
 from pprint import pprint
 
-from py360link.link360 import Link360Response, Bib
+from py360link.link360 import Link360Response, Bib, Response, Item
 
 #Directory where test data is stored.  
 DATA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data')
@@ -20,8 +20,8 @@ def read_data(filename):
 class TestAPIResponse(unittest.TestCase):
     def setUp(self):
         self.api_resp = read_data('article.xml')
-        self.resp = Link360Response(self.api_resp)
-        self.bib = Bib(self.resp.results()[0])
+        self.resp = Response(self.api_resp)
+        self.bib = Item(self.resp.results()[0])
 
     def test_result_length(self):
         results = self.resp.results()
@@ -45,8 +45,8 @@ class TestArticleResponse(unittest.TestCase):
 
     def setUp(self):
         self.api_resp = read_data('article.xml')
-        self.resp = Link360Response(self.api_resp)
-        self.bib = Bib(self.resp.results()[0])
+        self.resp = Response(self.api_resp)
+        self.bib = Item(self.resp.results()[0])
 
     def test_format(self):
         self.assertEqual(self.bib.format, 'journal')
@@ -62,30 +62,19 @@ class TestArticleResponse(unittest.TestCase):
             elif link['type'] == 'journal':
                 self.assertEqual(link['coverage_start'],  '2007-02-01')
 
-    def test_identifiers(self):
-        def _g(il, key):
-            l = [ids.get('id') for ids in il if ids.get('type') == key]
-            if l != []:
-                return l[0]
-            else:
-                return
-        ids = self.bib.get_identifiers()
-        self.assertEqual(_g(ids, 'doi'), '10.1177/1753193408098482')
-        self.assertEqual(_g(ids, 'pmid'), '19282400')
-        self.assertEqual(_g(ids, 'isbn'), None)
-
-    def test_common(self):
-        common = self.bib.get_common()
-        pprint(common)
-        pprint(self.bib.convert())
-
+    def test_meta(self):
+        meta = self.bib.meta()
+        #pprint(meta)
+        self.assertEqual(meta['doi'], '10.1177/1753193408098482')
+        self.assertEqual(meta['pmid'], '19282400')
+        self.assertEqual(meta.get('isbn'), None)
 
 class TestBookChapterResponse(unittest.TestCase):
 
     def setUp(self):
         self.api_resp = read_data('bookchapter_not_held.xml')
-        self.resp = Link360Response(self.api_resp)
-        self.bib = Bib(self.resp.results()[0])
+        self.resp = Response(self.api_resp)
+        self.bib = Item(self.resp.results()[0])
 
     def test_format(self):
         self.assertEqual(self.bib.format, 'book')
@@ -96,8 +85,11 @@ class TestBookChapterResponse(unittest.TestCase):
     def test_links(self):
         self.assertEqual(self.bib.get_links(), None)
 
-    def test_title(self):
-        pprint(self.bib.convert())
+    def test_meta(self):
+        meta = self.bib.meta()
+        self.assertEqual(meta.get('title'), 'New methods for the analysis of change.')
+        self.assertEqual(meta.get('doi'), '10.1037/10409-006')
+        self.assertTrue(('isbn', '9781557987549') in meta.get('isn'))
 
 
 

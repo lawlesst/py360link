@@ -14,6 +14,8 @@ Types to handle.
 from xml.etree.ElementTree import ElementTree
 import sys
 
+from sort_databases import do_sort
+
 
 #t = py360link.fetch_bibjson('id=pmid:19282400&sid=Entrez:PubMed', key='rl3tp7zf5x')
 #t = py360link.fetch_bibjson('title=science', key='rl3tp7zf5x')
@@ -48,26 +50,179 @@ def pull(elem, path, findall=False, text=False):
         else:
             return _this
 
-def sort_links(links):
-    """
-    Sort the links returned by library defined criteria.
-    http://stackoverflow.com/questions/10274868/sort-a-list-of-python-dictionaries-depending-on-a-ordered-criteria
+class Response(object):
 
-    A high value will push the link to the bottom of the list.
-    A low or negative value will bring it to the front.
-    """
-    criteria = ['JSTOR']
-    def _mapped(provider):
-        if provider == 'LexisNexis':
-            return 20000
-        elif provider == 'Elsevier':
-            return -10000
-        else:
-            return 100
-    links.sort(key=lambda x: criteria.index(x['provider'])\
-             if x['provider'] in criteria\
-             else _mapped(x['provider']))
-    return links
+    def __init__(self, api_response):
+        tree = ElementTree()
+        self.tree = tree.parse(api_response)
+
+    def results(self):
+        results = self.tree.findall('*/{0}result'.format(ss))
+        return results
+
+    def query(self):
+        """
+        Get the raw query from the SerSol response.
+        """
+        query = self.tree.find('*/{0}queryString'.format(ss,)).text
+        return query
+
+    def library(self):
+        """
+        Get the library name from the response.
+        """
+        lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
+        return lib
+
+    def library_id(self):
+        """
+        Get the code associated with the library.
+        """
+        lib = self.tree.find('*/{0}library'.format(ss,))
+        code = lib.attrib.get('id')
+        return code
+
+class Item(object):
+
+    def __init__(self, item):
+        """
+        Parse an individual result from the 360Link API.
+        """
+        self.item = item
+        self.citation = self.get_citation()
+        self.format = self.get_format()
+        self.title = self.get_title()
+        self.source = self.get_source()
+        self.btype = self.get_btype()
+
+    def get_format(self):
+        """
+        Format as returned by 360Link.
+        """
+        format = self.item.attrib.get('format')
+        return format
+
+    def get_citation(self):
+        citation = pull(self.item, '{0}citation')
+        return citation
+
+    def get_source(self):
+        source = pull(self.citation, '{1}source', text=True)
+        return source
+
+    def get_title(self):
+        title = pull(self.citation, '{1}title', text=True)
+        return title
+
+    def get_btype(self):
+        format = self.format
+        source = self.source
+        title = self.title
+        btype = 'Unknown'
+        if format == 'journal':
+            if (source is not None) and (title is None):
+                btype = 'journal'
+            else:
+                btype ='article'
+        elif format == 'book':
+            #Test for chapter.
+            if (source is not None) and (source != title):
+                btype = 'book chapter'
+            else:
+                btype = 'book'
+        return btype
+
+    def meta(self):
+        m = {}
+        isns = []
+        for child in self.citation.getchildren():
+            #Remove namespaces
+            tag = child.tag.replace(ss, '').replace(dc, '')
+            #Handle print or electronic isbns.
+            #These two tags are repeating.
+            if (tag == 'isbn') or (tag == 'issn'):
+                if child.attrib.get('type') == 'electronic':
+                    if tag == 'isbn':
+                        isns.append(('eisbn', child.text))
+                    elif tag == 'issn':
+                        isns.append(('eissn', child.text))
+                else:
+                    isns.append((tag, child.text))
+            else:
+                m[tag] = child.text
+        m['isn'] = isns
+        return m
+
+
+    def convert(self):
+        r = {
+            'bul-type': self.get_btype(),
+            'links': self.get_links(),
+        }
+        meta = self.meta()
+        r.update(meta)
+        return r
+
+    def get_links(self, sort=False, remove_duplicates=True, article_only=True):
+        #One linkGroup with many linkGroups.
+        link_groups = pull(self.item, '{0}linkGroups')
+        if link_groups is None:
+            return 
+        links = []
+        #Holder so we don't add duplicates.
+        seen_links = []
+        seen_providers = []
+        groups = pull(link_groups, '{0}linkGroup', findall=True)
+        for group in link_groups:
+            start = pull(group, '{0}holdingData/{0}startDate', text=True)
+            provider = pull(group, '{0}holdingData/{0}providerName', text=True)
+            #Don't offer multiple links from the same provider.
+            if provider in seen_providers:
+                continue
+            else:
+                seen_providers.append(provider)
+            database = pull(group, '{0}holdingData/{0}databaseName', text=True)
+            #Coverage start and end.
+            #<ssopenurl:normalizedData>
+            #<ssopenurl:startDate>2000-01-01</ssopenurl:startDate>
+            #<ssopenurl:endDate>2004-12-31</ssopenurl:endDate>
+            cstart = pull(group, '{0}holdingData/{0}normalizedData/{0}startDate', text=True)
+            cend = pull(group, '{0}normalizedData/{0}endDate', text=True)
+
+            #links
+            urls = pull(group, '{0}url', findall=True)
+            for url in urls:
+                #Don't offer the same url twice.
+                if (remove_duplicates is True) and (url in seen_links):
+                    continue
+                l = {}
+                l['provider'] = provider
+                l['url'] = url.text
+                link_type = url.attrib.get('type')
+                l['type'] = link_type
+                #Make sense out of the various links returned from SerSol.
+                if link_type == 'article':
+                    l['anchor'] = 'Full text available from %s.' % database
+                elif link_type == 'source':
+                   l['anchor'] = provider
+                elif link_type == 'journal':
+                    l['anchor'] = 'Journal website'
+                elif link_type == 'issue':
+                    l['anchor'] = 'Browse this issue'
+                else:
+                    l['anchor'] = provider
+                #coverage
+                if cstart is not None:
+                    l['coverage_start'] = cstart
+                if cend is not None:
+                    l['coverage_end'] = cend
+
+                links.append(l)
+                seen_links.append(url)
+
+        if sort is True:
+            return sort_links(links)
+        return links
 
 class Bib(object):
 
@@ -134,11 +289,14 @@ class Bib(object):
                 'type': 'pmid',
                 'id': pull(cite, '{0}pmid', text=True)
             },
-            {
-                'type': 'isbn',
-                'id': pull(cite, '{0}isbn', text=True)
-            },
         ]
+        #Add isbns.  There can be many.
+        isbns = pull(cite, '{0}isbn', findall=True)
+        for isbn in isbns:
+            ids.append({
+                'type': 'isbn',
+                'id': isbn.text
+            })
         ids = filter(lambda id: id['id'] is not None, ids)
         return ids
 
