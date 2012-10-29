@@ -33,6 +33,10 @@ class TestArticleResponse(unittest.TestCase):
         self.assertEqual(query, 
                         'version=1.0&url_ver=Z39.88-2004&id=pmid:19282400&sid=Entrez:PubMed')
 
+    def test_library(self):
+        lib = self.resp.library()
+        self.assertEqaul(lib, 'Bob')
+
     def test_format(self):
         self.assertEqual(self.bib.format, 'journal')
 

@@ -231,6 +231,13 @@ class Link360Response(object):
         query = self.tree.find('*/{0}queryString'.format(ss,)).text
         return query
 
+    def library(self):
+        """
+        Get the library name from the response.
+        """
+        lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
+        return lib
+
     
 
     def fill(self, elem, key):
