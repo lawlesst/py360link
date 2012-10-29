@@ -7,7 +7,7 @@ except ImportError:
 import unittest
 from pprint import pprint
 
-from py360link.link360 import Link360Response, Bib, Response, Item
+from py360link.link360 import Response, Item
 
 #Directory where test data is stored.  
 DATA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data')
