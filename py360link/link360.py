@@ -13,33 +13,225 @@ Types to handle.
 """
 from xml.etree.ElementTree import ElementTree
 import sys
+
+
 #t = py360link.fetch_bibjson('id=pmid:19282400&sid=Entrez:PubMed', key='rl3tp7zf5x')
 #t = py360link.fetch_bibjson('title=science', key='rl3tp7zf5x')
 
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
-with open(sys.argv[1], 'rt') as f:
-    tree = ElementTree()
-    tree.parse(f)
+# with open(sys.argv[1], 'rt') as f:
+#     tree = ElementTree()
+#     tree.parse(f)
 
 
-results = tree.findall('*/{0}result'.format(ss))
-query = tree.find('*/{0}queryString'.format(ss,)).text
+# results = tree.findall('*/{0}result'.format(ss))
+# query = tree.find('*/{0}queryString'.format(ss,)).text
 
-from bibjsontools import from_openurl
+def pull(elem, path, findall=False, text=False):
+    """
+    XML parsing helper.
+    """
+    if findall is True:
+        if elem:
+            return elem.findall(path.format(ss,dc))
+        else:
+            return []
+    else:
+        _this = elem.find(path.format(ss, dc))
+        if text is True:
+            try:
+                return _this.text
+            except AttributeError:
+                return
+        else:
+            return _this
 
-#Get a starting bibjson object to work with
-this_bib = from_openurl(query)
+def sort_links(links):
+    """
+    Sort the links returned by library defined criteria.
+    http://stackoverflow.com/questions/10274868/sort-a-list-of-python-dictionaries-depending-on-a-ordered-criteria
+
+    A high value will push the link to the bottom of the list.
+    A low or negative value will bring it to the front.
+    """
+    criteria = ['JSTOR']
+    def _mapped(provider):
+        if provider == 'LexisNexis':
+            return 20000
+        elif provider == 'Elsevier':
+            return -10000
+        else:
+            return 100
+    links.sort(key=lambda x: criteria.index(x['provider'])\
+             if x['provider'] in criteria\
+             else _mapped(x['provider']))
+    return links
+
+class Bib(object):
+
+    def __init__(self, item):
+        """
+        Parse an individual result from the 360Link API.
+        """
+        self.item = item
+
+    @property
+    def format(self):
+        """
+        Format as returned by 360Link.
+        """
+        format = self.item.attrib.get('format')
+        return format
+
+    @property
+    def citation(self):
+        citation = pull(self.item, '{0}citation')
+        return citation
+
+    @property
+    def source(self):
+        source = pull(self.citation, '{1}source', text=True)
+        return source
+
+    @property
+    def title(self):
+        title = pull(self.citation, '{1}title', text=True)
+        return title
+
+    def btype(self):
+        format = self.format
+        source = self.source
+        title = self.title
+        btype = 'Unknown'
+        if format == 'journal':
+            if (source is not None) and (title is None):
+                btype = 'journal'
+            else:
+                btype ='article'
+        elif format == 'book':
+            #Test for chapter.
+            if (source is not None) and (source != title):
+                btype = 'bookitem'
+            else:
+                btype = 'book'
+        return btype
+
+    def get_identifiers(self):
+        """
+        Get a list of identifiers for a given citation.
+        """
+        cite = self.citation
+        ids = []
+        #doi
+        k = {'type': None,
+            'id': None}
+        doi = pull(cite, '{0}doi')
+        if doi is not None:
+            k['type'] = 'doi'
+            k['id'] = doi.text
+            ids.append(k)
+        #pmid
+        k = {}
+        pmid = pull(cite, '{0}pmid')
+        if pmid is not None:
+            k['type'] = 'pmid'
+            k['id'] = pmid.text
+            ids.append(k)
+        isbn = pull(cite, '{0}isbn')
+        if isbn is not None:
+            k['type'] = 'isbn'
+            k['id'] = isbn.text
+            ids.append(isbn)
+        return ids
+
+    def get_links(self, sort=False, remove_duplicates=True):
+        #One linkGroup with many linkGroups.
+        link_groups = pull(self.item, '{0}linkGroups')
+        if link_groups is None:
+            return 
+        links = []
+        #Holder so we don't add duplicates.
+        seen_links = []
+        seen_providers = []
+        groups = pull(link_groups, '{0}linkGroup', findall=True)
+        for group in link_groups:
+            start = pull(group, '{0}holdingData/{0}startDate', text=True)
+            provider = pull(group, '{0}holdingData/{0}providerName', text=True)
+            #Don't offer multiple links from the same provider.
+            if provider in seen_providers:
+                continue
+            else:
+                seen_providers.append(provider)
+            database = pull(group, '{0}holdingData/{0}databaseName', text=True)
+            #Coverage start and end.
+            #<ssopenurl:normalizedData>
+            #<ssopenurl:startDate>2000-01-01</ssopenurl:startDate>
+            #<ssopenurl:endDate>2004-12-31</ssopenurl:endDate>
+            cstart = pull(group, '{0}holdingData/{0}normalizedData/{0}startDate', text=True)
+            cend = pull(group, '{0}normalizedData/{0}endDate', text=True)
+
+            #links
+            urls = pull(group, '{0}url', findall=True)
+            for url in urls:
+                #Don't offer the same url twice.
+                if (remove_duplicates is True) and (url in seen_links):
+                    continue
+                l = {}
+                l['provider'] = provider
+                l['url'] = url.text
+                link_type = url.attrib.get('type')
+                l['type'] = link_type
+                #Make sense out of the various links returned from SerSol.
+                if link_type == 'article':
+                    l['anchor'] = 'Full text available from %s.' % database
+                elif link_type == 'source':
+                   l['anchor'] = provider
+                elif link_type == 'journal':
+                    l['anchor'] = 'Journal website'
+                elif link_type == 'issue':
+                    l['anchor'] = 'Browse this issue'
+                else:
+                    l['anchor'] = provider
+                #coverage
+                if cstart is not None:
+                    l['coverage_start'] = cstart
+                if cend is not None:
+                    l['coverage_end'] = cend
+
+                links.append(l)
+                seen_links.append(url)
+
+        if sort is True:
+            return sort_links(links)
+        return links
+
+    def convert(self):
+        """
+        Make BibJSON from this result.
+        """
+        pass
 
 
-bibs = []
+class Link360Response(object):
 
-class BibJSON360Link(object):
-
-    def __init__(api_response):
+    def __init__(self, api_response):
         tree = ElementTree()
-        self.doc = tree.parse(f)
+        self.tree = tree.parse(api_response)
+
+    def results(self):
+        results = self.tree.findall('*/{0}result'.format(ss))
+        return results
+
+    def query(self):
+        """
+        Get the raw query from the SerSol response.
+        """
+        query = self.tree.find('*/{0}queryString'.format(ss,)).text
+        return query
+
+    
 
     def fill(self, elem, key):
         d = {}
@@ -227,50 +419,24 @@ class BibJSON360Link(object):
 
 
 
-for res in results:
+# for res in results:
 
-    format = res.attrib.get('format')
+#     format = res.attrib.get('format')
 
-    #One citation per result
-    citation = pull(res, '{0}citation')
-    #One linkGroup with many linkGroups.
-    link_groups = pull(res, '{0}linkGroups')
-    title = pull(citation, '{1}title', text=True)
-    source = pull(citation, '{1}source', text=True)
-    if format == 'journal':
-        if (source is not None) and (title is None):
-            btype = 'journal'
-            links = make_links(link_groups)
-            jrnl = make_journal(citation)
-            for ids in this_bib.get('identifier', []):
-                jrnl['identifier'].append(ids)
-            this_bib['journal'] = jrnl
-            this_bib['type'] = btype
-        else:
-            btype ='article'
-            bibj = get_article_citation(citation, link_groups)
-            print bibj['title']
-            for link in bibj.get('links', []):
-                if link['type'] == 'article':
-                    print link['provider']
-            bibs.append(bibj)
-    elif format == 'book':
-        #Test for chapter.
-        title = pull(citation, '{1}title', text=True)
-        source = pull(citation, '{1}source', text=True)
-        if (source is not None) and (source != title):
-            btype = 'bookitem'
-        else:
-            btype = 'book'
-    else:
-        print 'UNKNOWN'
+#     #One citation per result
+#     citation = pull(res, '{0}citation')
+#     #One linkGroup with many linkGroups.
+#     link_groups = pull(res, '{0}linkGroups')
+#     title = pull(citation, '{1}title', text=True)
+#     source = pull(citation, '{1}source', text=True)
 
-    print title, source
-    print btype
-    print '---\n'
 
-from pprint import pprint
-pprint(this_bib)
+#     print title, source
+#     print btype
+#     print '---\n'
+
+# from pprint import pprint
+# pprint(this_bib)
 
 
     # journal = citation.find('{1}source'.format(ss,dc)).text 
