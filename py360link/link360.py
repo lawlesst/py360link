@@ -1,308 +1,308 @@
-import urllib
-from lxml import etree
-import urlparse
+"""
+Types to handle.
 
-SERSOL_KEY = None
+- articles held
+- articles not held
+- ebooks held
+- books not held
+- book chapters held
+- book chapters not held
+- journals held (display titles and coverage ranges)
+- journals not held
 
-#Make the OpenURL for passing on.
-SERSOL_MAP = {
-    'journal': {
-        'title': 'atitle',
-        'creatorLast': 'aulast',
-        'creator': 'au',
-        'creatorFirst': 'aufirst',
-        'creatorMiddle': 'auinitm',
-        'source': 'jtitle',
-        'date': 'date',
-        #issns are tricky - handle in application logic
-        'issn': 'issn',
-        'eissn': 'eissn',
-        'isbn': 'isbn',
-        'volume': 'volume',
-        'issue': 'issue',
-        'spage': 'spage',
-        #dois and pmids need to be handled differently too.
-        #This mapping is here just to retain their original keys.
-        'doi': 'doi',
-        'pmid': 'pmid',
-        #'publisher': 'publisher'
-        #publicationPlace
-        },
-    'book': {
-        'publisher': 'pub',
-        'isbn': 'isbn',
-        'title': 'btitle',
-        'date': 'date',
-        'creator': 'author',
-        'creatorLast': 'aulast',
-        'creatorLast': 'aulast',
-        'creatorFirst': 'aufirst',
-        'creatorMiddle': 'auinitm',
-        'isbn': 'isbn',
-        'title': 'btitle',
-        'date': 'date',
-        'publicationPlace': 'place',
-        'format': 'genre',
-        'source': 'btitle',
-    }
-}
+"""
+from xml.etree.ElementTree import ElementTree
+import sys
+#t = py360link.fetch_bibjson('id=pmid:19282400&sid=Entrez:PubMed', key='rl3tp7zf5x')
+#t = py360link.fetch_bibjson('title=science', key='rl3tp7zf5x')
 
-class Link360Exception(Exception):
-    def __init__self(self, message, Errors):
-        #http://stackoverflow.com/questions/1319615/proper-way-to-declare-custom-exceptions-in-modern-python
-        Exception.__init__(self, message)
-        self.Errors = Errors
+ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
+dc = "{http://purl.org/dc/elements/1.1/}"
 
-def get_sersol_response(query, key, timeout):
-    """
-    Get the SerSol API response and parse it into an etree.
-    """
-    import urllib2
-    if key is None:
-        raise Link360Exception('Serial Solutions 360Link XML API key is required.')
-    
-    required_url_elements = {}
-    required_url_elements['version'] = '1.0'
-    required_url_elements['url_ver'] = 'Z39.88-2004'
-    #Go get the 360link response
-    #Base 360Link url
-    base_url = "http://%s.openurl.xml.serialssolutions.com/openurlxml?" % key
-    base_url += urllib.urlencode(required_url_elements)
-    url = base_url + '&%s' % query.lstrip('?')
-    f = urllib2.urlopen(url, timeout=timeout)
-    doc = etree.parse(f)
-    return doc
+with open(sys.argv[1], 'rt') as f:
+    tree = ElementTree()
+    tree.parse(f)
 
-def get_sersol_data(query, key=None, timeout=5):
-    """
-    Get and process the data from the API and store in Python dictionary.
-    If you would like to cache the 360Link responses, this is data structure
-    that you would like to cache.  
-    
-    Specify a timeout for the http request to 360Link.
-    
-    """
-    if query is None:
-        raise Link360Exception('OpenURL query required.')
-    doc = get_sersol_response(query, key, timeout)
-    data = Link360JSON(doc).convert()
-    return data
 
-class Link360JSON(object):
-    """
-    Convert Link360 XML To JSON
-    follows http://xml.serialssolutions.com/ns/openurl/v1.0/ssopenurl.xsd
-    Godmar Back <godmar@gmail.com>, May 2009
-    """
-    def __init__(self, doc):
-        self.doc = doc
+results = tree.findall('*/{0}result'.format(ss))
+query = tree.find('*/{0}queryString'.format(ss,)).text
 
-    def convert(self):
+from bibjsontools import from_openurl
 
-        ns = {
-            "ss" : "http://xml.serialssolutions.com/ns/openurl/v1.0",
-            "sd" : "http://xml.serialssolutions.com/ns/diagnostics/v1.0",
-            "dc" : "http://purl.org/dc/elements/1.1/"
-        }
+#Get a starting bibjson object to work with
+this_bib = from_openurl(query)
 
-        def x(xpathexpr, root = self.doc):
-            return root.xpath(xpathexpr, namespaces=ns)
 
-        def t(xpathexpr, root = self.doc):
-            r = x(xpathexpr, root)
-            if len(r) > 0:
-                return r[0]
-            return None
+bibs = []
 
-        def m(dict, *kv):
-            """merge (k, v) pairs into dict if v is not None"""
-            for (k, v) in kv:
-                if v:
-                    dict[k] = v
-            return dict
+class BibJSON360Link(object):
 
-        return m({ 
-            'version' : t("//ss:version/text()"),
-            'echoedQuery' : {
-                'queryString' : t("//ss:echoedQuery/ss:queryString/text()"),
-                'timeStamp' : t("//ss:echoedQuery/@timeStamp"),
-                'library' : {
-                    'name' : t("//ss:echoedQuery/ss:library/ss:name/text()"),
-                    'id' : t("//ss:echoedQuery/ss:library/@id")
-                }
-            },
-            'dbDate' : t("//ss:results/@dbDate"),
-            'results' : [ {
-                'format' : t("./@format", result),
-                'citation' : m({ },
-                    ('title', t(".//dc:title/text()")),
-                    ('creator', t(".//dc:creator/text()")),
-                    ('source', t(".//dc:source/text()")),
-                    ('date', t(".//dc:date/text()")),
-                    ('publisher', t(".//dc:publisher/text()")),
-                    ('creatorFirst', t(".//ss:creatorFirst/text()")),
-                    ('creatorMiddle', t(".//ss:creatorMiddle/text()")),
-                    ('creatorLast', t(".//ss:creatorLast/text()")),
-                    ('volume', t(".//ss:volume/text()")),
-                    ('issue', t(".//ss:issue/text()")),
-                    ('spage', t(".//ss:spage/text()")),
-                    ('doi', t(".//ss:doi/text()")),
-                    ('pmid', t(".//ss:pmid/text()")),
-                    ('publicationPlace', t(".//ss:publicationPlace/text()")),
-                    ('institution', t(".//ss:institution/text()")),
-                    ('advisor', t(".//ss:advisor/text()")),
-                    ('patentNumber', t(".//ss:patentNumber/text()")),
-                    # assumes at most one ISSN per type
-                    ('issn', dict([ (t("./@type", issn), t("./text()", issn))
-                                   for issn in x("//ss:issn") ])),
-                    ('eissn', t(".//ss:eissn/text()")),
-                    ('isbn', [ t("./text()", isbn) for isbn in x("//ss:isbn") ])
-                ),
-                'linkGroups' : [ {
-                    'type' : t("./@type", group),
-                    'holdingData' : m({ 
-                            'providerId' : t(".//ss:providerId/text()", group),
-                            'providerName' : t(".//ss:providerName/text()", group),
-                            'databaseId' : t(".//ss:databaseId/text()", group),
-                            'databaseName' : t(".//ss:databaseName/text()", group),
-                        },
-                        # output normalizedData/startDate instead of startDate, 
-                        # assuming that 'startDate' is redundant
-                        ('startDate' , t(".//ss:normalizedData/ss:startDate/text()", group)),
-                        ('endDate' , t(".//ss:normalizedData/ss:endDate/text()", group))),
-                    # assumes at most one URL per type
-                    'url' : dict([ (t("./@type", url), t("./text()", url)) 
-                                   for url in x("./ss:url", group) ])
-                } for group in x("//ss:linkGroups/ss:linkGroup")]
-            } for result in x("//ss:result") ] }, 
-            # optional
-            ('diagnostics', 
-                [ m({ 'uri' : t("./sd:uri/text()", diag) },
-                    ('details', t("./sd:details/text()", diag)), 
-                    ('message', t("./sd:message/text()", diag))
-                ) for diag in x("//sd:diagnostic")]
-            )
-            # TBD derivedQueryData
-        )
-        
+    def __init__(api_response):
+        tree = ElementTree()
+        self.doc = tree.parse(f)
 
-class Resolved(object):
-    """
-    Object for handling resolved Sersol queries.
-    """
-    def __init__(self, data):
-        self.data = data
-        self.query = data['echoedQuery']['queryString']
-        self.library = data['echoedQuery']['library']['name']
-        self.query_dict = urlparse.parse_qs(self.query)
-        error = self.data.get('diagnostics', None)
-        if error:
-            msg = ' '.join([e.get('message') for e in error if e])
-            raise Link360Exception(msg)
-        
-        #Shortcut to first returned citation and link group
-        self.citation = data['results'][0]['citation']
-        self.link_groups = data['results'][0]['linkGroups']
-        self.format = data['results'][0]['format']
-    
-        
-    @property
-    def openurl(self):
-        return urllib.urlencode(self.openurl_pairs(), doseq=True)
-    
-    @property
-    def oclc_number(self):
-        """
-        Parse the original query string and retain certain key, values.
-        Primarily meant for storing the worldcat accession number passed on
-        by Worldcat.org/FirstSearch
-        """
-        import re
-        reg = re.compile('\d+')
-        dat = self.query_dict.get('rfe_dat', None)
-        if dat:
-            #get the first one because dat is a list
-            match = reg.search(dat[0])
-            if match:
-                return match.group()
-        return
-    
-    def _retain_ourl_params(self):
-        """
-        Parse the original query string and retain certain key, values.
-        Primarily meant for storing the worldcat accession number passed on
-        by http://worldcat.org or FirstSearch.
-        
-        This could be also helpful for retaining any other metadata that won't
-        be returned from the 360Link API.
-        """
-        retain = ['rfe_dat', 'rfr_id', 'sid']
-        parsed = urlparse.parse_qs(self.query)
-        out = []
-        for key in retain:
-            val = parsed.get(key, None)
-            if val:
-                out.append((key, val))
-        return out
-    
-    def openurl_pairs(self):
-        """
-        Create a default OpenURL from the given citation that can be passed
-        on to other systems for querying.
-          
-        Subclass this to handle needs for specific system.
-        
-        See http://ocoins.info/cobg.html for implementation guidelines.
-        """
-        query = urlparse.parse_qs(self.query)
-        format = self.format
-        #Pop invalid rft_id from OCLC
-        try:
-            
-            if query['rft_id'][0].startswith('info:oclcnum'):
-                del query['rft_id']
-        except KeyError:
-            pass
-        #Massage the citation into an OpenURL
-        #Using a list of tuples here to account for the possiblity of repeating values.
-        out = []
-        for k, v in self.citation.items():
-            #Handle issns differently.  They are a dict in the 360LinkJSON response.
-            if k == 'issn':
-                issn_dict = self.citation[k]
-                if isinstance(issn_dict, dict):
-                    issn = issn_dict.get('print', None)
-                else:
-                    issn = issn_dict
-                if issn:
-                    out.append(('rft.issn', issn))
-                continue
-            #Handle remaining keys. 
-            try:
-                k = SERSOL_MAP[format][k]
-            except KeyError:
-                pass
-            #handle ids separately 
-            if (k == 'doi'):
-                out.append(('rft_id', 'info:doi/%s' % v))
-            elif (k == 'pmid'):
-                #We will append a plain pmid for systems that will resolve that.
-                out.append(('pmid', v))
-                out.append(('rft_id', 'info:pmid/%s' % v))
+    def fill(self, elem, key):
+        d = {}
+        if elem is not None:
+            d[key] = elem.text
+        return d
+
+    def pull(self, elem, path, findall=False, text=False):
+        if findall is True:
+            if elem:
+                return elem.findall(path.format(ss,dc))
             else:
-                out.append(('rft.%s' % k, v))
-        #versioning
-        out.append(('url_ver', 'Z39.88-2004'))
-        out.append(('version', '1.0'))
-        #handle formats
-        if format == 'book':
-            out.append(('rft_val_fmt', 'info:ofi/fmt:kev:mtx:book'))  
-            out.append(('rft.genre', 'book'))
-        #for now will treat all non-books as journals
+                return []
         else:
-            out.append(('rft_val_fmt', 'info:ofi/fmt:kev:mtx:journal')) 
-            out.append(('rft.genre', 'article'))
-        #Get the special keys.   
-        retained_values = self._retain_ourl_params()
-        out += retained_values
-        return out
+            _this = elem.find(path.format(ss, dc))
+            if text is True:
+                try:
+                    return _this.text
+                except AttributeError:
+                    return
+            else:
+                return _this
+
+    def make_author(self, cite):
+        authors = []
+        auth = {}
+        auth['name'] = pull(cite, '{1}creator', text=True)
+        first = pull(cite, '{0}creatorFirst', cite)
+        last = pull(cite, '{0}creatorLast', cite)
+        auth.update(fill(last, 'lastname'))
+        auth.update(fill(first, 'firstname'))
+        authors.append(auth)
+        return authors
+
+    def make_journal(self, cite):
+        jrnl = {}
+        jrnl['name'] = pull(cite, '{1}source').text
+
+        #identifiers
+        issns = pull(cite, '{0}issn', findall=True)
+        ids = []
+        for issn in issns:
+            itype = issn.attrib.get('type')
+            this_id = {}
+            this_id['id'] = issn.text
+            if itype == 'print':
+                this_id['type'] = 'issn'
+            elif itype == 'electronic':
+                this_id['type'] = 'eissn'
+            ids.append(this_id)
+        jrnl['identifier'] = ids
+        return jrnl
+
+    def make_links(link_groups):
+
+        if link_groups is None:
+            return 
+
+        links = []
+        #Holder so we don't add duplicates.
+        seen_links = []
+        seen_providers = []
+
+        groups = pull(link_groups, '{0}linkGroup', findall=True)
+        for group in link_groups:
+            start = pull(group, '{0}holdingData/{0}startDate', text=True)
+            provider = pull(group, '{0}holdingData/{0}providerName', text=True)
+            #Don't offer multiple links from the same provider.
+            if provider in seen_providers:
+                continue
+            else:
+                seen_providers.append(provider)
+            database = pull(group, '{0}holdingData/{0}databaseName', text=True)
+
+            #Coverage start and end.
+            #<ssopenurl:normalizedData>
+            #<ssopenurl:startDate>2000-01-01</ssopenurl:startDate>
+            #<ssopenurl:endDate>2004-12-31</ssopenurl:endDate>
+            cstart = pull(group, '{0}holdingData/{0}normalizedData/{0}startDate', text=True)
+            cend = pull(group, '{0}normalizedData/{0}endDate', text=True)
+            
+
+            #links
+            urls = pull(group, '{0}url', findall=True)
+            for url in urls:
+                #Don't offer the same url twice.
+                if url in seen_links:
+                    continue
+                #print url.attrib.get('type'), url.text
+                l = {}
+                l['provider'] = provider
+                l['url'] = url.text
+                link_type = url.attrib.get('type')
+                l['type'] = link_type
+                #Make sense out of the various links returned from SerSol.
+                if link_type == 'article':
+                    l['anchor'] = 'Full text available from %s.' % database
+                elif link_type == 'source':
+                    l['anchor'] = provider
+                elif link_type == 'journal':
+                    l['anchor'] = 'Journal website'
+                elif link_type == 'issue':
+                    l['anchor'] = 'Browse this issue'
+                else:
+                    l['anchor'] = provider
+
+                #coverage
+                if cstart is not None:
+                    l['coverage_start'] = cstart
+                if cend is not None:
+                    l['coverage_end'] = cend
+
+                links.append(l)
+                seen_links.append(url)
+        #sort
+        #order = dict((key, idx) for idx, key in enumerate(["Elsevier", "EBSCOhost"]))
+        #sorted(links, key=order.get)
+        #print links
+        #http://stackoverflow.com/questions/10274868/sort-a-list-of-python-dictionaries-depending-on-a-ordered-criteria
+        criteria = ['JSTOR']
+        def _mapped(provider):
+            if provider == 'LexisNexis':
+                return 20000
+            elif provider == 'Elsevier':
+                return -10000
+            else:
+                return 100
+
+        links.sort(key=lambda x: criteria.index(x['provider']) if x['provider'] in criteria else _mapped(x['provider']))
+        return links
+
+
+
+    def make_article_identifiers(cite):
+        ids = []
+        #doi
+        k = {'type': None,
+            'id': None}
+        doi = pull(cite, '{0}doi')
+        if doi is not None:
+            k['type'] = 'doi'
+            k['id'] = doi.text
+            ids.append(k)
+        #pmid
+        k = {}
+        pmid = pull(cite, '{0}pmid')
+        if pmid is not None:
+            k['type'] = 'pmid'
+            k['id'] = pmid.text
+            ids.append(k)
+
+        return ids
+
+    def get_article_citation(cite, link_groups):
+        b = {}
+        #Handle objects first.
+        #authors
+        auth = make_author(cite)
+        b['author'] = auth
+        #journal
+        jrnl = make_journal(cite)
+        b['journal'] = jrnl
+        #links
+        b['links'] = make_links(link_groups)
+
+        #article identifiers
+        article_ids = make_article_identifiers(cite)
+        b['identifier'] = article_ids
+
+        #simple meta
+        #title
+        b['title'] = pull(cite, '{1}title', text=True)
+        b['volume'] = pull(cite, '{0}volume', text=True)
+        b['issue'] = pull(cite, '{0}issue', text=True)
+        b['start_page'] = pull(cite, '{0}spage', text=True)
+        #Serials Solutions doesn't return end pages
+        #so we will set all articles to EOA for 'end of article'.
+        b['end_page'] = 'EOA'
+
+        #year
+        year_elm = pull(cite, '{1}date')
+        if year_elm is not None:
+            b['year'] = year_elm.text.split('-')[0]
+        return b
+
+
+
+for res in results:
+
+    format = res.attrib.get('format')
+
+    #One citation per result
+    citation = pull(res, '{0}citation')
+    #One linkGroup with many linkGroups.
+    link_groups = pull(res, '{0}linkGroups')
+    title = pull(citation, '{1}title', text=True)
+    source = pull(citation, '{1}source', text=True)
+    if format == 'journal':
+        if (source is not None) and (title is None):
+            btype = 'journal'
+            links = make_links(link_groups)
+            jrnl = make_journal(citation)
+            for ids in this_bib.get('identifier', []):
+                jrnl['identifier'].append(ids)
+            this_bib['journal'] = jrnl
+            this_bib['type'] = btype
+        else:
+            btype ='article'
+            bibj = get_article_citation(citation, link_groups)
+            print bibj['title']
+            for link in bibj.get('links', []):
+                if link['type'] == 'article':
+                    print link['provider']
+            bibs.append(bibj)
+    elif format == 'book':
+        #Test for chapter.
+        title = pull(citation, '{1}title', text=True)
+        source = pull(citation, '{1}source', text=True)
+        if (source is not None) and (source != title):
+            btype = 'bookitem'
+        else:
+            btype = 'book'
+    else:
+        print 'UNKNOWN'
+
+    print title, source
+    print btype
+    print '---\n'
+
+from pprint import pprint
+pprint(this_bib)
+
+
+    # journal = citation.find('{1}source'.format(ss,dc)).text 
+    # issn = citation.find('{0}issn'.format(ss,dc))
+    # if issn is not None:
+    #     issn_type = issn.attrib.get('type')
+    #     issn_value = issn.text
+    #     print issn_type, issn_value
+
+    # #linkGroups
+    # groups = linkGroups.findall('{0}linkGroup'.format(ss,dc))
+    # for group in groups:
+    #     #holding = group.findall('{0}holdingData'.format(ss,dc))
+    #     start = group.find('{0}holdingData/{0}startDate'.format(ss,dc))
+    #     provider = group.find('{0}holdingData/{0}providerName'.format(ss,dc)).text
+    #     print provider
+    #     if start is not None:
+    #         print start.text
+    #     urls = group.findall('{0}url'.format(ss,dc))
+    #     for url in urls:
+    #         print url.attrib.get('type'), url.text
+    # print '----\n'
+
+# print results
+# print '--'
+
+# citations = t.findall('*/{0}result/{0}citation'.format(ss,))
+# linkgroups = t.findall('*/{0}result/{0}linkGroups'.format(ss,))
+
+# print citations
+# print '--'
+# print linkgroups
+#print resp
+#print t.findall('{0}openURLResponse/{0}result'.format(ns,))
+
