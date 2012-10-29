@@ -76,31 +76,32 @@ class Bib(object):
         Parse an individual result from the 360Link API.
         """
         self.item = item
+        self.citation = self.get_citation()
+        self.format = self.get_format()
+        self.title = self.get_title()
+        self.source = self.get_source()
+        self.btype = self.get_btype()
 
-    @property
-    def format(self):
+    def get_format(self):
         """
         Format as returned by 360Link.
         """
         format = self.item.attrib.get('format')
         return format
 
-    @property
-    def citation(self):
+    def get_citation(self):
         citation = pull(self.item, '{0}citation')
         return citation
 
-    @property
-    def source(self):
+    def get_source(self):
         source = pull(self.citation, '{1}source', text=True)
         return source
 
-    @property
-    def title(self):
+    def get_title(self):
         title = pull(self.citation, '{1}title', text=True)
         return title
 
-    def btype(self):
+    def get_btype(self):
         format = self.format
         source = self.source
         title = self.title
@@ -113,7 +114,7 @@ class Bib(object):
         elif format == 'book':
             #Test for chapter.
             if (source is not None) and (source != title):
-                btype = 'bookitem'
+                btype = 'book chapter'
             else:
                 btype = 'book'
         return btype
@@ -123,30 +124,59 @@ class Bib(object):
         Get a list of identifiers for a given citation.
         """
         cite = self.citation
-        ids = []
-        #doi
-        k = {'type': None,
-            'id': None}
-        doi = pull(cite, '{0}doi')
-        if doi is not None:
-            k['type'] = 'doi'
-            k['id'] = doi.text
-            ids.append(k)
-        #pmid
-        k = {}
-        pmid = pull(cite, '{0}pmid')
-        if pmid is not None:
-            k['type'] = 'pmid'
-            k['id'] = pmid.text
-            ids.append(k)
-        isbn = pull(cite, '{0}isbn')
-        if isbn is not None:
-            k['type'] = 'isbn'
-            k['id'] = isbn.text
-            ids.append(isbn)
+        #Get potential identifiers
+        ids = [
+            {
+                'type': 'doi',
+                'id': pull(cite, '{0}doi', text=True)
+            },
+            {
+                'type': 'pmid',
+                'id': pull(cite, '{0}pmid', text=True)
+            },
+            {
+                'type': 'isbn',
+                'id': pull(cite, '{0}isbn', text=True)
+            },
+        ]
+        ids = filter(lambda id: id['id'] is not None, ids)
         return ids
 
-    def get_links(self, sort=False, remove_duplicates=True):
+    def get_author(self):
+        cite = self.citation
+        authors = []
+        auth = {}
+        auth['name'] = pull(cite, '{1}creator', text=True)
+        first = pull(cite, '{0}creatorFirst', cite, text=True)
+        last = pull(cite, '{0}creatorLast', cite, text=True)
+        auth['lastname'] = last
+        auth['firstname'] = first
+        authors.append(auth)
+        return authors
+
+    def get_common(self):
+        """
+        Pull metdata common to all bytpes.
+        """
+        cite = self.citation
+        bib = {}
+        #title and author are the same for all fromats in bibjson
+        bib['title'] = self.title
+        if self.btype == 'book chapter':
+            bib['booktitle'] = self.source
+        bib['author'] = self.get_author()
+        bib['start_page'] = pull(cite, '{0}spage', text=True)
+        year = pull(cite, '{1}date', text=True)
+        if year is not None:
+            bib['year'] = year.split('-')[0]
+        bib['issue'] = pull(cite, '{0}issue', text=True)
+        bib['volume'] = pull(cite, '{0}volume', text=True)
+        bib['publisher'] = pull(cite, '{1}publisher', text=True)
+        bib['address'] = pull(cite, '{0}publicationPlace', text=True)
+        return bib
+
+
+    def get_links(self, sort=False, remove_duplicates=True, article_only=True):
         #One linkGroup with many linkGroups.
         link_groups = pull(self.item, '{0}linkGroups')
         if link_groups is None:
@@ -186,6 +216,8 @@ class Bib(object):
                 #Make sense out of the various links returned from SerSol.
                 if link_type == 'article':
                     l['anchor'] = 'Full text available from %s.' % database
+                    if article_only is True:
+                        break
                 elif link_type == 'source':
                    l['anchor'] = provider
                 elif link_type == 'journal':
@@ -211,7 +243,12 @@ class Bib(object):
         """
         Make BibJSON from this result.
         """
-        pass
+        b = {}
+        b['bul-type'] = self.btype
+        b.update(self.get_common())
+        b['links'] = self.get_links()
+        b['identifiers'] = self.get_identifiers()
+        return b
 
 
 class Link360Response(object):
@@ -238,7 +275,14 @@ class Link360Response(object):
         lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
         return lib
 
-    
+    def library_id(self):
+        """
+        Get the code associated with the library.
+        """
+        lib = self.tree.find('*/{0}library'.format(ss,))
+        code = lib.attrib.get('id')
+        return code
+
 
     def fill(self, elem, key):
         d = {}
