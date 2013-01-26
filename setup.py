@@ -5,7 +5,7 @@
 from setuptools import setup, find_packages
 
 setup(name='py360link',
-    version='1',
+    version='1.1',
     packages = find_packages(),
     test_suite = 'py360link.test'
 )

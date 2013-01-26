@@ -80,7 +80,7 @@ class TestBookChapterResponse(unittest.TestCase):
         self.assertEqual(self.bib.format, 'book')
 
     def test_btype(self):
-        self.assertEqual(self.bib.btype, 'book chapter')
+        self.assertEqual(self.bib.btype, 'inbook')
 
     def test_links(self):
         self.assertEqual(self.bib.get_links(), None)
@@ -101,12 +101,27 @@ class TestLinkSort(unittest.TestCase):
         """
         pass
 
+class TestLookups(unittest.TestCase):
+
+    def test_lookup(self):
+        from py360link import get
+        query = 'rft_id=info:doi/10.1016/j.neuroimage.2009.12.024'
+        key = 'rl3tp7zf5x'
+        resp = get(query, key=key)
+        print resp.raw()
+        for result in resp.records:
+            print resp.bibjson(result)
+        import ipdb; ipdb.set_trace()
+        #print resp.json()
+
+
 
 def suite():
     suite1 = unittest.makeSuite(TestAPIResponse, 'test')
     suite2 = unittest.makeSuite(TestArticleResponse, 'test')
     suite3 = unittest.makeSuite(TestBookChapterResponse, 'test')
-    all_tests = unittest.TestSuite((suite1,suite2, suite3))
+    suite4 = unittest.makeSuite(TestLookups, 'test')
+    all_tests = unittest.TestSuite((suite1,suite2, suite3, suite4))
     return all_tests
 
 if __name__ == '__main__':

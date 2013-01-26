@@ -11,25 +11,44 @@ Types to handle.
 - journals not held
 
 """
+from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import ElementTree
 import sys
+import urllib
+import urllib2
 
 from sort_databases import do_sort
 
-
-#t = py360link.fetch_bibjson('id=pmid:19282400&sid=Entrez:PubMed', key='rl3tp7zf5x')
-#t = py360link.fetch_bibjson('title=science', key='rl3tp7zf5x')
+#Default timeout for calls to the API.
+#Experience shows that requests with Pubmed IDs may take up to 10 seconds. 
+TIMEOUT = 5
 
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
-# with open(sys.argv[1], 'rt') as f:
-#     tree = ElementTree()
-#     tree.parse(f)
 
+class Link360Exception(Exception):
+    def __init__self(self, message, Errors):
+        #http://stackoverflow.com/questions/1319615/proper-way-to-declare-custom-exceptions-in-modern-python
+        Exception.__init__(self, message)
+        self.Errors = Errors
 
-# results = tree.findall('*/{0}result'.format(ss))
-# query = tree.find('*/{0}queryString'.format(ss,)).text
+def get_api_response(query, key, timeout):
+    """
+    Get the SerSol API response and parse it into an etree.
+    """
+    if key is None:
+        raise Link360Exception('Serial Solutions 360Link XML API key is required.')
+    required_url_elements = {}
+    required_url_elements['version'] = '1.0'
+    required_url_elements['url_ver'] = 'Z39.88-2004'
+    #Go get the 360link response
+    #Base 360Link url
+    base_url = "http://%s.openurl.xml.serialssolutions.com/openurlxml?" % key
+    base_url += urllib.urlencode(required_url_elements)
+    url = base_url + '&%s' % query.lstrip('?')
+    resp = urllib2.urlopen(url, timeout=timeout)   
+    return resp
 
 def pull(elem, path, findall=False, text=False):
     """
@@ -51,8 +70,11 @@ def pull(elem, path, findall=False, text=False):
             return _this
 
 class Response(object):
-
+    """
+    Handle the 360Link API response.
+    """
     def __init__(self, api_response):
+        self.api_response = api_response
         tree = ElementTree()
         self.tree = tree.parse(api_response)
 
@@ -81,6 +103,20 @@ class Response(object):
         lib = self.tree.find('*/{0}library'.format(ss,))
         code = lib.attrib.get('id')
         return code
+
+    def raw(self):
+        """
+        Return raw XML from API response.
+        """
+        from xml.etree import ElementTree as ET
+        return ET.tostring(self.api_response, 'utf-8')
+
+    def json(self):
+        out = []
+        for result in self.results():
+            item = Item(result)
+            out.append(item.convert())
+        return out
 
 class Item(object):
 
@@ -127,7 +163,7 @@ class Item(object):
         elif format == 'book':
             #Test for chapter.
             if (source is not None) and (source != title):
-                btype = 'book chapter'
+                btype = 'inbook'
             else:
                 btype = 'book'
         return btype
@@ -153,10 +189,9 @@ class Item(object):
         m['isn'] = isns
         return m
 
-
     def convert(self):
         r = {
-            'bul-type': self.get_btype(),
+            'type': self.get_btype(),
             'links': self.get_links(),
         }
         meta = self.meta()
@@ -223,3 +258,148 @@ class Item(object):
         if sort is True:
             return sort_links(links)
         return links
+
+class SimpleResponse(object):
+
+    def __init__(self, query, key, **kwargs):
+        self.incoming_query = query
+        self.key = key
+
+        if key is None:
+            raise Link360Exception('Serial Solutions 360Link XML API key is required.')
+        required_url_elements = {}
+        required_url_elements['version'] = '1.0'
+        required_url_elements['url_ver'] = 'Z39.88-2004'
+        #Go get the 360link response
+        #Base 360Link url
+        base_url = "http://%s.openurl.xml.serialssolutions.com/openurlxml?" % self.key
+        base_url += urllib.urlencode(required_url_elements)
+        url = base_url + '&%s' % self.incoming_query.lstrip('?')
+        timeout = kwargs.get('timeout', TIMEOUT)
+        resp = urllib2.urlopen(url, timeout=timeout)   
+        tree = ElementTree()
+        self.tree = tree.parse(resp)
+
+        self.records = self.results()
+        self.total = len(self.records)
+
+    def results(self):
+        results = self.tree.findall('*/{0}result'.format(ss))
+        out = []
+        for result in results:
+            out.append(Item(result))
+        return out
+
+    def raw(self):
+        #import ipdb; ipdb.set_trace()
+        xml = ET.tostring(self.tree, 'utf-8')
+        return xml
+
+    @property
+    def query(self):
+        """
+        Get the raw query from the SerSol response.
+        """
+        query = self.tree.find('*/{0}queryString'.format(ss,)).text
+        return query
+
+    @property
+    def library(self):
+        """
+        Get the library name from the response.
+        """
+        lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
+        return lib
+
+    @property    
+    def library_id(self):
+        """
+        Get the code associated with the library.
+        """
+        lib = self.tree.find('*/{0}library'.format(ss,))
+        code = lib.attrib.get('id')
+
+    def json(self):
+        out = {}
+        meta = {}
+        meta['size'] = self.total
+        meta['library'] = self.library
+        out['metadata'] = meta
+        out['records'] = [self.bibjson(rec)\
+                         for rec in self.results()]
+        return out
+
+    def bibjson(self, item):
+        citation = item.meta()
+        format = item.format
+        bib = {}
+        bib['links'] = item.get_links()
+        #Handle type
+        if format == 'book':
+            bib['type'] = 'book'
+        elif format == 'journal':
+            #see if there is a title, then it is an article
+            if citation.get('title', None) is not None:
+                bib['type'] = 'article'
+            else:
+                bib['type'] = 'journal'
+        else:
+            bib['type'] = 'misc'
+        
+        #journal names
+        if bib['type'] != 'book':
+            bib['journal'] = {'name': citation.get('source')}
+        
+        #pages
+        bib['start_page'] = citation.get('spage')
+        
+        #title and author are the same for all fromats in bibjson
+        bib['title'] = citation.get('title')
+        author = [
+                         {'name': citation.get('creator'),
+                          'firstname': citation.get('creatorFirst'),
+                          'lastname': citation.get('creatorLast')
+                          }
+                         ]
+        #ToDo: Pull out empty keys for authors
+        bib['author'] = author 
+        bib['year'] = citation.get('date', '-').split('-')[0]
+        bib['issue'] = citation.get('issue')
+        bib['volume'] = citation.get('volume')
+        bib['publisher'] = citation.get('publisher')
+        bib['address'] = citation.get('publicationPlace')
+        
+        
+        #Get potential identifiers
+        ids = [{
+                'type': 'doi',
+                'id': citation.get('doi')
+                },
+                {
+                'type': 'issn',
+                'id': citation.get('issn', {}).get('print')
+                },
+               {
+                'type': 'eissn',
+                'id': citation.get('eissn')
+                },
+               {
+                'type': 'pmid',
+                'id': citation.get('pmid')
+        }]
+        ids = filter(lambda id: id['id'] is not None, ids)
+        #add isbns to identifiers
+        isbns = citation.get('isbn', [])
+        for isbn in isbns:
+            ids.append({'type': 'isbn',
+                        'id': isbn})
+        bib['identifier'] = ids
+        
+        return bib
+
+def get(query, **params):
+    api_key = params.get('key')
+    api_timeout = params.get('timeout', TIMEOUT)
+    #api_resp = get_api_response(query, api_key, api_timeout)
+    results = SimpleResponse(query, api_key)
+    return results
