@@ -26,12 +26,17 @@ TIMEOUT = 5
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
-
-class Link360Exception(Exception):
-    def __init__self(self, message, Errors):
-        #http://stackoverflow.com/questions/1319615/proper-way-to-declare-custom-exceptions-in-modern-python
-        Exception.__init__(self, message)
-        self.Errors = Errors
+def get(query, **params):
+    """
+    Method to query the API and return a response 
+    object.
+    """
+    api_key = params.get('key')
+    api_timeout = params.get('timeout', TIMEOUT)
+    response_url, api_response = get_api_response(query, api_key, api_timeout)
+    resp = Response(api_response,
+                    api_url=response_url)
+    return resp
 
 def get_api_response(query, key, timeout):
     """
@@ -49,25 +54,6 @@ def get_api_response(query, key, timeout):
     url = base_url + '&%s' % query.lstrip('?')
     resp = urllib2.urlopen(url, timeout=timeout)   
     return (resp.geturl(), resp)
-
-def pull(elem, path, findall=False, text=False):
-    """
-    XML parsing helper.
-    """
-    if findall is True:
-        if elem:
-            return elem.findall(path.format(ss,dc))
-        else:
-            return []
-    else:
-        _this = elem.find(path.format(ss, dc))
-        if text is True:
-            try:
-                return _this.text
-            except AttributeError:
-                return
-        else:
-            return _this
 
 class Item(object):
 
@@ -314,10 +300,27 @@ class Response(object):
                          for item in self.results()]
         return out
 
-def get(query, **params):
-    api_key = params.get('key')
-    api_timeout = params.get('timeout', TIMEOUT)
-    response_url, api_response = get_api_response(query, api_key, api_timeout)
-    resp = Response(api_response,
-                    api_url=response_url)
-    return resp
+def pull(elem, path, findall=False, text=False):
+    """
+    XML parsing helper.
+    """
+    if findall is True:
+        if elem:
+            return elem.findall(path.format(ss,dc))
+        else:
+            return []
+    else:
+        _this = elem.find(path.format(ss, dc))
+        if text is True:
+            try:
+                return _this.text
+            except AttributeError:
+                return
+        else:
+            return _this
+
+class Link360Exception(Exception):
+    def __init__self(self, message, Errors):
+        #http://stackoverflow.com/questions/1319615/proper-way-to-declare-custom-exceptions-in-modern-python
+        Exception.__init__(self, message)
+        self.Errors = Errors
