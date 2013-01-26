@@ -69,41 +69,6 @@ def pull(elem, path, findall=False, text=False):
         else:
             return _this
 
-# class Response(object):
-#     """
-#     Handle the 360Link API response.
-#     """
-#     def __init__(self, api_response):
-#         self.api_response = api_response
-#         tree = ElementTree()
-#         self.tree = tree.parse(api_response)
-
-#     def results(self):
-#         results = self.tree.findall('*/{0}result'.format(ss))
-#         return results
-
-#     def query(self):
-#         """
-#         Get the raw query from the SerSol response.
-#         """
-#         query = self.tree.find('*/{0}queryString'.format(ss,)).text
-#         return query
-
-#     def library(self):
-#         """
-#         Get the library name from the response.
-#         """
-#         lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
-#         return lib
-
-#     def library_id(self):
-#         """
-#         Get the code associated with the library.
-#         """
-#         lib = self.tree.find('*/{0}library'.format(ss,))
-#         code = lib.attrib.get('id')
-#         return code
-
 class Item(object):
 
     def __init__(self, item):
