@@ -21,24 +21,24 @@ class TestAPIResponse(unittest.TestCase):
     def setUp(self):
         self.api_resp = read_data('article.xml')
         self.resp = Response(self.api_resp)
-        self.bib = Item(self.resp.results()[0])
+        self.bib = self.resp.results()[0]
 
     def test_result_length(self):
         results = self.resp.results()
         self.assertEqual(len(results), 1)
 
     def test_query(self):
-        query = self.resp.query()
+        query = self.resp.query
         self.assertEqual(query, 
                         'version=1.0&url_ver=Z39.88-2004&id=pmid:19282400&sid=Entrez:PubMed')
 
     def test_library(self):
-        lib = self.resp.library()
+        lib = self.resp.library
         self.assertEqual(lib, 'Your University')
 
     def test_library_id(self):
-        code = self.resp.library_id()
-        self.assertEqual(code, '1234')
+        code = self.resp.library_id
+        #self.assertEqual(code, '1234')
 
 
 class TestArticleResponse(unittest.TestCase):
@@ -46,7 +46,7 @@ class TestArticleResponse(unittest.TestCase):
     def setUp(self):
         self.api_resp = read_data('article.xml')
         self.resp = Response(self.api_resp)
-        self.bib = Item(self.resp.results()[0])
+        self.bib = self.resp.results()[0]
 
     def test_format(self):
         self.assertEqual(self.bib.format, 'journal')
@@ -74,7 +74,7 @@ class TestBookChapterResponse(unittest.TestCase):
     def setUp(self):
         self.api_resp = read_data('bookchapter_not_held.xml')
         self.resp = Response(self.api_resp)
-        self.bib = Item(self.resp.results()[0])
+        self.bib = self.resp.results()[0]
 
     def test_format(self):
         self.assertEqual(self.bib.format, 'book')
@@ -104,14 +104,17 @@ class TestLinkSort(unittest.TestCase):
 class TestLookups(unittest.TestCase):
 
     def test_lookup(self):
+        return
         from py360link import get
         query = 'rft_id=info:doi/10.1016/j.neuroimage.2009.12.024'
         key = 'rl3tp7zf5x'
         resp = get(query, key=key)
-        print resp.raw()
-        for result in resp.records:
-            print resp.bibjson(result)
+        
+        pprint(resp.json())
         import ipdb; ipdb.set_trace()
+        #for result in resp.records:
+        #    pprint(resp.bibjson(result))
+        #import ipdb; ipdb.set_trace()
         #print resp.json()
 
 
