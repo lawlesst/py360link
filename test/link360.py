@@ -105,19 +105,19 @@ class TestLookups(unittest.TestCase):
 
     def test_lookup(self):
         return
-        from py360link import get
-        query = 'rft_id=info:doi/10.1016/j.neuroimage.2009.12.024'
-        key = 'rl3tp7zf5x'
-        resp = get(query, key=key)
         
-        pprint(resp.json())
-        import ipdb; ipdb.set_trace()
-        #for result in resp.records:
-        #    pprint(resp.bibjson(result))
-        #import ipdb; ipdb.set_trace()
-        #print resp.json()
+class TestBibJson(unittest.TestCase):
+    """
+    Test the bibjson returned format.
+    """
+    def test_article(self):
+        return
 
+    def test_book(self):
+        return
 
+    def test_chapter(self):
+        return
 
 def suite():
     suite1 = unittest.makeSuite(TestAPIResponse, 'test')
