@@ -1,16 +1,12 @@
 """
 Types to handle.
 
-- articles held
-- articles not held
-- ebooks held
-- books not held
-- book chapters held
-- book chapters not held
-- journals held (display titles and coverage ranges)
-- journals not held
-
+- articles
+- books
+- ebooks
+- book chapters/parts
 """
+
 from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import ElementTree
 import sys
@@ -23,6 +19,7 @@ from sort_databases import do_sort
 #Experience shows that requests with Pubmed IDs may take up to 10 seconds. 
 TIMEOUT = 5
 
+#Namespaces for XML parsing. 
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
