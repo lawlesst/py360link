@@ -21,6 +21,7 @@ TIMEOUT = 5
 
 #Namespaces for XML parsing. 
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
+ssdiag = "{ttp://xml.serialssolutions.com/ns/diagnostics/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
 def get(query, **params):
@@ -290,7 +291,10 @@ class Response(object):
         out = {}
         meta = {}
         meta['size'] = self.total
-        meta['library'] = self.library
+        try:
+            meta['library'] = self.library
+        except AttributeError, e:
+            raise Link360Exception("Error communicating with 360 link.  Verify url %s." % self.url)
         meta['url'] = self.url
         out['metadata'] = meta
         out['records'] = [item.bibjson()\
@@ -317,7 +321,4 @@ def pull(elem, path, findall=False, text=False):
             return _this
 
 class Link360Exception(Exception):
-    def __init__self(self, message, Errors):
-        #http://stackoverflow.com/questions/1319615/proper-way-to-declare-custom-exceptions-in-modern-python
-        Exception.__init__(self, message)
-        self.Errors = Errors
+    pass

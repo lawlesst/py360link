@@ -7,6 +7,7 @@ except ImportError:
 import unittest
 from pprint import pprint
 
+import py360link
 from py360link.link360 import Response, Item
 
 #Directory where test data is stored.  
@@ -106,25 +107,32 @@ class TestLookups(unittest.TestCase):
     def test_lookup(self):
         return
         
-class TestBibJson(unittest.TestCase):
-    """
-    Test the bibjson returned format.
-    """
-    def test_article(self):
-        return
+class TestGetBibJSON(unittest.TestCase):
 
-    def test_book(self):
-        return
-
-    def test_chapter(self):
-        return
+    def setUp(self):
+        import os
+        self.key = os.getenv("SERSOL_KEY")
+        if self.key is None:
+            print>>sys.stderr, """
+            Skipping tests.  No SERSOL_KEY found in env.
+            export SERSOL_KEY=mykey 
+            """
+    def test_bad_key(self):
+        resp = py360link.get('id=pmid:20495523', key='blah')
+        try:
+            resp.json()
+            raise
+        except py360link.Link360Exception, e:
+            pass
+        
 
 def suite():
     suite1 = unittest.makeSuite(TestAPIResponse, 'test')
     suite2 = unittest.makeSuite(TestArticleResponse, 'test')
     suite3 = unittest.makeSuite(TestBookChapterResponse, 'test')
     suite4 = unittest.makeSuite(TestLookups, 'test')
-    all_tests = unittest.TestSuite((suite1,suite2, suite3, suite4))
+    suite5 = unittest.makeSuite(TestGetBibJSON, 'test')
+    all_tests = unittest.TestSuite((suite1,suite2, suite3, suite4, suite5))
     return all_tests
 
 if __name__ == '__main__':
