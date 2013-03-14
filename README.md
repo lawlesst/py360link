@@ -1,6 +1,6 @@
 py360Link
 =========
-Python utilities for woking with the 360Link XML API from Serial Solutions.  
+Python utilities for working with the 360Link XML API from Serial Solutions.  
 
 It requires a 360Link XML API key, which is generally the site id that prefixes all Serial Solutions customer web pages, e.g. http://r123456.search.serialssolutions.com.
 
@@ -17,8 +17,8 @@ pip install git+git://github.com/lawlesst/py360link.git
 Use
 ---
 ```python
-from pylink360 import get_sersol_data, Resolve
+from py360link import get_sersol_data, Resolved
 query = 'rft_id=info:doi/10.1016/j.neuroimage.2009.12.024'
 sersol_data = get_sersol_data(query, key='yourkey')
-resolved = Resolve(sersol_data)
+resolved = Resolved(sersol_data)
 ```
