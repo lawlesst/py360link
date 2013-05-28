@@ -306,7 +306,7 @@ def pull(elem, path, findall=False, text=False):
     XML parsing helper.
     """
     if findall is True:
-        if elem:
+        if elem is not None:
             return elem.findall(path.format(ss,dc))
         else:
             return []
