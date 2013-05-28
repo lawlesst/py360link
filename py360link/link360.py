@@ -12,7 +12,7 @@ from xml.etree.ElementTree import ElementTree
 import urllib
 import urllib2
 
-from sort_database import do_sort
+from sort_databases import do_sort
 
 #Default timeout for calls to the API.
 #Experience shows that requests with Pubmed IDs may take up to 10 seconds.
