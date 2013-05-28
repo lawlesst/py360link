@@ -9,24 +9,24 @@ Types to handle.
 
 from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import ElementTree
-import sys
 import urllib
 import urllib2
 
-from sort_databases import do_sort
+from sort_database import do_sort
 
 #Default timeout for calls to the API.
-#Experience shows that requests with Pubmed IDs may take up to 10 seconds. 
-TIMEOUT = 5
+#Experience shows that requests with Pubmed IDs may take up to 10 seconds.
+TIMEOUT = 10
 
-#Namespaces for XML parsing. 
+#Namespaces for XML parsing.
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
 ssdiag = "{ttp://xml.serialssolutions.com/ns/diagnostics/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
+
 def get(query, **params):
     """
-    Method to query the API and return a response 
+    Method to query the API and return a response
     object.
     """
     api_key = params.get('key')
@@ -35,6 +35,7 @@ def get(query, **params):
     resp = Response(api_response,
                     api_url=response_url)
     return resp
+
 
 def get_api_response(query, key, timeout):
     """
@@ -50,8 +51,9 @@ def get_api_response(query, key, timeout):
     base_url = "http://%s.openurl.xml.serialssolutions.com/openurlxml?" % key
     base_url += urllib.urlencode(required_url_elements)
     url = base_url + '&%s' % query.lstrip('?')
-    resp = urllib2.urlopen(url, timeout=timeout)   
+    resp = urllib2.urlopen(url, timeout=timeout)
     return (resp.geturl(), resp)
+
 
 class Item(object):
 
@@ -94,7 +96,7 @@ class Item(object):
             if (source is not None) and (title is None):
                 btype = 'journal'
             else:
-                btype ='article'
+                btype = 'article'
         elif format == 'book':
             #Test for chapter.
             if (source is not None) and (source != title):
@@ -128,14 +130,12 @@ class Item(object):
         #One linkGroup with many linkGroups.
         link_groups = pull(self.item, '{0}linkGroups')
         if link_groups is None:
-            return 
+            return
         links = []
         #Holder so we don't add duplicates.
         seen_links = []
         seen_providers = []
-        groups = pull(link_groups, '{0}linkGroup', findall=True)
         for group in link_groups:
-            start = pull(group, '{0}holdingData/{0}startDate', text=True)
             provider = pull(group, '{0}holdingData/{0}providerName', text=True)
             #Don't offer multiple links from the same provider.
             if provider in seen_providers:
@@ -182,7 +182,7 @@ class Item(object):
                 seen_links.append(url)
 
         if sort is True:
-            return sort_links(links)
+            return do_sort(links)
         return links
 
     def bibjson(self):
@@ -190,7 +190,6 @@ class Item(object):
         Convert an Item to bibjson.
         """
         citation = self.meta()
-        format = self.format
         bib = {}
         bib['type'] = self.get_btype()
         bib['links'] = self.get_links()
@@ -203,36 +202,39 @@ class Item(object):
         #title and author are the same for all fromats in bibjson
         bib['title'] = citation.get('title')
         author = [
-                    {'name': citation.get('creator'),
-                        'firstname': citation.get('creatorFirst'),
-                        'lastname': citation.get('creatorLast')
-                    }
-                ]
+            {
+                'name': citation.get('creator'),
+                'firstname': citation.get('creatorFirst'),
+                'lastname': citation.get('creatorLast')
+            }
+        ]
         #ToDo: Pull out empty keys for authors
-        bib['author'] = author 
+        bib['author'] = author
         bib['year'] = citation.get('date', '-').split('-')[0]
         bib['issue'] = citation.get('issue')
         bib['volume'] = citation.get('volume')
         bib['publisher'] = citation.get('publisher')
         bib['address'] = citation.get('publicationPlace')
-        
+
         #Get potential identifiers
-        ids = [{
+        ids = [
+            {
                 'type': 'doi',
                 'id': citation.get('doi')
-                },
-                {
+            },
+            {
                 'type': 'issn',
                 'id': citation.get('issn', {}).get('print')
-                },
-               {
+            },
+            {
                 'type': 'eissn',
                 'id': citation.get('eissn')
-                },
-               {
+            },
+            {
                 'type': 'pmid',
                 'id': citation.get('pmid')
-        }]
+            }
+        ]
         ids = filter(lambda id: id['id'] is not None, ids)
         #add isbns to identifiers
         isbns = citation.get('isbn', [])
@@ -241,6 +243,7 @@ class Item(object):
                         'id': isbn})
         bib['identifier'] = ids
         return bib
+
 
 class Response(object):
 
@@ -279,13 +282,14 @@ class Response(object):
         lib = self.tree.find('*/{0}library/{0}name'.format(ss,)).text
         return lib
 
-    @property    
+    @property
     def library_id(self):
         """
         Get the code associated with the library.
         """
         lib = self.tree.find('*/{0}library'.format(ss,))
         code = lib.attrib.get('id')
+        return code
 
     def json(self):
         out = {}
@@ -293,13 +297,16 @@ class Response(object):
         meta['size'] = self.total
         try:
             meta['library'] = self.library
-        except AttributeError, e:
+        except AttributeError:
             raise Link360Exception("Error communicating with 360 link.  Verify url %s." % self.url)
         meta['url'] = self.url
         out['metadata'] = meta
-        out['records'] = [item.bibjson()\
-                         for item in self.results()]
+        out['records'] = [
+            item.bibjson()
+            for item in self.results()
+        ]
         return out
+
 
 def pull(elem, path, findall=False, text=False):
     """
@@ -307,7 +314,7 @@ def pull(elem, path, findall=False, text=False):
     """
     if findall is True:
         if elem is not None:
-            return elem.findall(path.format(ss,dc))
+            return elem.findall(path.format(ss, dc))
         else:
             return []
     else:
@@ -319,6 +326,7 @@ def pull(elem, path, findall=False, text=False):
                 return
         else:
             return _this
+
 
 class Link360Exception(Exception):
     pass
