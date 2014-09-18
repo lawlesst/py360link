@@ -20,7 +20,7 @@ TIMEOUT = 10
 
 #Namespaces for XML parsing.
 ss = "{http://xml.serialssolutions.com/ns/openurl/v1.0}"
-ssdiag = "{ttp://xml.serialssolutions.com/ns/diagnostics/v1.0}"
+ssdiag = "{http://xml.serialssolutions.com/ns/diagnostics/v1.0}"
 dc = "{http://purl.org/dc/elements/1.1/}"
 
 
@@ -85,6 +85,9 @@ class Item(object):
 
     def get_title(self):
         title = pull(self.citation, '{1}title', text=True)
+        #Check source if title is blank
+        if title is None:
+            return pull(self.citation, '{1}source', text=True)
         return title
 
     def get_btype(self):
@@ -98,8 +101,8 @@ class Item(object):
             else:
                 btype = 'article'
         elif format == 'book':
-            #Test for chapter.
-            if (source is not None) and (source != title):
+            #Test for chapter - seems like the best we can do is look for a start page in the response.
+            if (source is not None) and (self.meta().get('spage') is not None):
                 btype = 'inbook'
             else:
                 btype = 'book'

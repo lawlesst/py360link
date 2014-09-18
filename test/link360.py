@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 try:
     import json
 except ImportError:
@@ -92,6 +93,50 @@ class TestBookChapterResponse(unittest.TestCase):
         self.assertEqual(meta.get('doi'), '10.1037/10409-006')
         self.assertTrue(('isbn', '9781557987549') in meta.get('isn'))
 
+class TestBookResponse(unittest.TestCase):
+
+    def setUp(self):
+        self.api_resp = read_data('book.xml')
+        self.resp = Response(self.api_resp)
+        self.bib = self.resp.results()[0]
+
+    def test_format(self):
+        self.assertEqual(self.bib.format, 'book')
+
+    def test_btype(self):
+        self.assertEqual(self.bib.btype, 'book')
+
+    def test_links(self):
+        self.assertEqual(self.bib.get_links(), None)
+
+    def test_meta(self):
+        meta = self.bib.meta()
+        self.assertEqual(meta.get('title'), 'The risk pool')
+        self.assertTrue(('isbn', '9780394565279') in meta.get('isn'))
+
+class TestBookResponse2(unittest.TestCase):
+    """
+    Test a book that doesn't have a dcterms title.
+    """
+
+    def setUp(self):
+        self.api_resp = read_data('book2.xml')
+        self.resp = Response(self.api_resp)
+        self.bib = self.resp.results()[0]
+
+    def test_format(self):
+        self.assertEqual(self.bib.format, 'book')
+
+    def test_btype(self):
+        self.assertEqual(self.bib.btype, 'book')
+
+    def test_links(self):
+        self.assertEqual(self.bib.get_links(), None)
+
+    def test_meta(self):
+        meta = self.bib.meta()
+        self.assertTrue(u'Beloved community : the cultural criticism of' in self.bib.title)
+        self.assertTrue(('isbn', '9780807842966') in meta.get('isn'))
 
 
 class TestLinkSort(unittest.TestCase):
@@ -132,7 +177,9 @@ def suite():
     suite3 = unittest.makeSuite(TestBookChapterResponse, 'test')
     suite4 = unittest.makeSuite(TestLookups, 'test')
     suite5 = unittest.makeSuite(TestGetBibJSON, 'test')
-    all_tests = unittest.TestSuite((suite1,suite2, suite3, suite4, suite5))
+    suite6 = unittest.makeSuite(TestBookResponse, 'test')
+    suite7 = unittest.makeSuite(TestBookResponse2, 'test')
+    all_tests = unittest.TestSuite((suite1,suite2, suite3, suite4, suite5, suite6, suite7))
     return all_tests
 
 if __name__ == '__main__':
