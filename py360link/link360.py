@@ -2,6 +2,13 @@ import urllib
 from lxml import etree
 import urlparse
 
+#Added to avoid the following errors:
+#Cannot convert lxml.etree._RotatingErrorLog to lxml.etree._BaseErrorLog
+class Logger(etree.PyErrorLog):
+    def log(self, entry, message, *args):
+        pass
+etree.use_global_python_log(Logger())
+
 SERSOL_KEY = None
 
 #Make the OpenURL for passing on.
